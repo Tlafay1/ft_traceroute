@@ -1,0 +1,6 @@
+*.o
+ft_traceroute
+libargparse*
+.vscode
+.gdb_history
+peda-*
