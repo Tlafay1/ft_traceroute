@@ -6,8 +6,6 @@ RM := rm -f
 
 SRCS := ft_traceroute.c
 
-TESTS := tests_utils.cpp tests_icmp.cpp
-
 TESTS := $(addprefix tests/, $(TESTS))
 
 OBJS := $(addprefix obj/, ${SRCS:.c=.o})
