@@ -1,12 +1,10 @@
-CC=gcc
+CC := gcc
 
-CFLAGS= -Wall -Wextra -Werror -std=gnu99
+CFLAGS := -Wall -Wextra -Werror -std=gnu99
 
 RM := rm -f
 
 SRCS := ft_traceroute.c
-
-TESTS := $(addprefix tests/, $(TESTS))
 
 OBJS := $(addprefix obj/, ${SRCS:.c=.o})
 
@@ -14,11 +12,11 @@ INCLUDE := include/ft_traceroute.h
 
 NAME := ft_traceroute
 
-LIBARGPARSE_VERSION = 4.0.1
+LIBARGPARSE_VERSION := 4.0.1
 
-LIBARGPARSE_URL = https://github.com/Tlafay1/libargparse/releases/download/v$(LIBARGPARSE_VERSION)/libargparse-$(LIBARGPARSE_VERSION).tar.gz
+LIBARGPARSE_URL := https://github.com/Tlafay1/libargparse/releases/download/v$(LIBARGPARSE_VERSION)/libargparse-$(LIBARGPARSE_VERSION).tar.gz
 
-LIBARGPARSE_NAME = libargparse-$(LIBARGPARSE_VERSION)
+LIBARGPARSE_NAME := libargparse-$(LIBARGPARSE_VERSION)
 
 all: $(NAME)
 
@@ -43,11 +41,10 @@ $(NAME): libs $(OBJS)
 	$(CC) $(CFLAGS) \
 		$(OBJS) \
 		-o $(NAME) \
-		-Llibft \
 		-L $(LIBARGPARSE_NAME)/lib \
-		-lm \
-		-lft \
+		-L./libft \
 		-largparse \
+		-lft \
 		-Wl,-R./libft
 
 obj/%.o : src/%.c $(INCLUDE)
@@ -72,10 +69,8 @@ re: fclean all
 .PHONY : all \
 	re \
 	libs \
-	tests \
 	libft \
 	clean \
 	fclean \
 	libargparse \
 	$(LIBARGPARSE_NAME)/configure
-.SILENT:
