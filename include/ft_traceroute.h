@@ -42,13 +42,13 @@ static t_argp argp __attribute__((unused)) = {
 typedef struct traceroute_args TRACE_R;
 struct traceroute_args
 {
-    struct sockaddr_in dest;
+    struct sockaddr_in to;
+    struct sockaddr_in from;
     char hostname[HOST_NAME_MAX];
     int socket_desc;
     // int packetlen;
-    // int ttl;
+    int ttl;
     int max_ttl;
-    int first_ttl;
     // int nqueries;
     // int nprobes;
     // int waittime;

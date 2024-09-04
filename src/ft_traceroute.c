@@ -2,26 +2,52 @@
 
 int send_packet(TRACE_R *traceroute)
 {
-    char message[2000];
+    char buffer[1024];
 
-    socklen_t server_struct_length = sizeof(struct sockaddr_in);
+    socklen_t tosize = sizeof(traceroute->to);
 
-    memset(message, '\0', sizeof(message));
+    int ttl = traceroute->ttl;
+    if (setsockopt(traceroute->socket_desc, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
+    {
+        perror("Could not set TTL");
+        return 1;
+    }
 
-    if (sendto(traceroute->socket_desc, message, sizeof(message), 0, (struct sockaddr *)&traceroute->dest, server_struct_length) < 0)
+    memcpy(buffer, "Hello", 5);
+    buffer[5] = '\0';
+
+    if (sendto(traceroute->socket_desc, buffer, ft_strlen(buffer), 0, (struct sockaddr *)&traceroute->to, tosize) < 0)
     {
         perror("Could not send packet");
         return 1;
     }
 
-    if (recvfrom(traceroute->socket_desc, message, sizeof(message), 0, (struct sockaddr *)&traceroute->dest, &server_struct_length) < 0)
+    // struct timeval timeout;
+    // timeout.tv_sec = 1; // 5 seconds timeout
+    // timeout.tv_usec = 0;
+    // if (setsockopt(traceroute->socket_desc, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+    // {
+    //     perror("Could not set socket timeout");
+    //     return 1;
+    // }
+
+    int n;
+    if ((n = recvfrom(traceroute->socket_desc, buffer, 2, sizeof buffer - 1, (struct sockaddr *)&traceroute->from, &tosize)) < 0)
     {
-        perror("Could not receive packet");
-        return 1;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
+            perror("Receive timed out");
+        }
+        else
+        {
+            perror("Could not receive packet");
+        }
+        // return 1;
     }
 
-    printf("Received packet from %s:%d\nData: %s\n\n",
-           inet_ntoa(traceroute->dest.sin_addr), ntohs(traceroute->dest.sin_port), message);
+    buffer[n] = '\0';
+
+    printf("Received packet from %s, ttl=%d\n", inet_ntoa(traceroute->from.sin_addr), ttl);
 
     return 0;
 }
@@ -35,24 +61,20 @@ int send_packet(TRACE_R *traceroute)
  */
 static int set_dest(TRACE_R *traceroute, const char *host)
 {
-    struct addrinfo hints;
-    struct addrinfo *res;
-    struct sockaddr_in *ipv4;
+    struct hostent *hostinfo = NULL;
 
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_socktype = SOCK_STREAM;
-
-    if (getaddrinfo(host, NULL, &hints, &res) != 0)
+    if ((hostinfo = gethostbyname(host)) == NULL)
+    {
+        perror("Could not get host by name");
         return 1;
+    }
 
-    ipv4 = (struct sockaddr_in *)res->ai_addr;
-    traceroute->dest = *ipv4;
+    traceroute->to.sin_addr = *(struct in_addr *)hostinfo->h_addr;
+    traceroute->to.sin_family = AF_INET;
+    traceroute->to.sin_port = htons(PORT);
 
-    ft_strlcpy(traceroute->hostname, host, HOST_NAME_MAX);
-    printf("Destination: %s\n", traceroute->hostname);
-
-    freeaddrinfo(res);
+    memcpy(&traceroute->to.sin_addr, hostinfo->h_addr_list[0], hostinfo->h_length);
+    strncpy(traceroute->hostname, host, HOST_NAME_MAX);
 
     return 0;
 }
@@ -74,9 +96,17 @@ int main(__attribute__((unused)) int argc, const char *argv[])
         return 1;
     }
 
-    set_dest(&traceroute, argr->values[0]);
+    if (set_dest(&traceroute, argr->values[0]))
+    {
+        perror("Could not set destination");
+        free_args(args);
+        return 1;
+    }
 
-    traceroute.socket_desc = socket(AF_INET, SOCK_RAW, IPPROTO_UDP);
+    traceroute.socket_desc = socket(AF_INET, SOCK_DGRAM, 0);
+    traceroute.port = PORT;
+    traceroute.ttl = 1;
+    traceroute.max_ttl = MAX_HOPS;
 
     if (traceroute.socket_desc < 0)
     {
@@ -84,7 +114,20 @@ int main(__attribute__((unused)) int argc, const char *argv[])
         return 1;
     }
 
-    send_packet(&traceroute);
+    printf("Traceroute to %s (%s), %d hops max, %d byte packets\n",
+           traceroute.hostname,
+           inet_ntoa(traceroute.to.sin_addr),
+           traceroute.max_ttl,
+           60);
+
+    while (traceroute.ttl <= traceroute.max_ttl)
+    {
+        send_packet(&traceroute);
+        traceroute.ttl++;
+    }
+
+    close(traceroute.socket_desc);
+    free_args(args);
 
     return 0;
 }
