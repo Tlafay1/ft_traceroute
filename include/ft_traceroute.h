@@ -35,13 +35,13 @@ static t_argp argp __attribute__((unused)) = {
 
 #define FIRST_TTL 1
 
-#define MAX_HOPS 30
+#define MAX_HOPS 64
 
 #define PORT 33434
 
 #define NQUERIES 3
 
-#define TIMEOUT 5
+#define TIMEOUT 3
 
 /*
  * @brief Structure for the traceroute command
