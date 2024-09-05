@@ -3,11 +3,12 @@
 int send_packet(TRACE_R *traceroute)
 {
     char buffer[1024];
+    bool timed_out = false;
 
     socklen_t tosize = sizeof(traceroute->to);
 
     int ttl = traceroute->ttl;
-    if (setsockopt(traceroute->socket_desc, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
+    if (setsockopt(traceroute->udp_fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
     {
         perror("Could not set TTL");
         return 1;
@@ -16,38 +17,35 @@ int send_packet(TRACE_R *traceroute)
     memcpy(buffer, "Hello", 5);
     buffer[5] = '\0';
 
-    if (sendto(traceroute->socket_desc, buffer, ft_strlen(buffer), 0, (struct sockaddr *)&traceroute->to, tosize) < 0)
+    if (sendto(traceroute->udp_fd, buffer, ft_strlen(buffer), 0, (struct sockaddr *)&traceroute->to, tosize) < 0)
     {
         perror("Could not send packet");
         return 1;
     }
 
-    // struct timeval timeout;
-    // timeout.tv_sec = 1; // 5 seconds timeout
-    // timeout.tv_usec = 0;
-    // if (setsockopt(traceroute->socket_desc, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
-    // {
-    //     perror("Could not set socket timeout");
-    //     return 1;
-    // }
+    struct timeval timeout;
+    timeout.tv_sec = traceroute->timeout;
+    timeout.tv_usec = 0;
+    if (setsockopt(traceroute->icmp_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0)
+    {
+        perror("Could not set socket timeout");
+        return 1;
+    }
 
-    int n;
-    if ((n = recvfrom(traceroute->socket_desc, buffer, 2, sizeof buffer - 1, (struct sockaddr *)&traceroute->from, &tosize)) < 0)
+    if (recvfrom(traceroute->icmp_fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&traceroute->from, &tosize) < 0)
     {
         if (errno == EAGAIN || errno == EWOULDBLOCK)
         {
-            perror("Receive timed out");
+            timed_out = true;
         }
         else
         {
             perror("Could not receive packet");
+            return 1;
         }
-        // return 1;
     }
 
-    buffer[n] = '\0';
-
-    printf("Received packet from %s, ttl=%d\n", inet_ntoa(traceroute->from.sin_addr), ttl);
+    printf("  %d   %s\n", ttl, timed_out ? "*" : inet_ntoa(traceroute->from.sin_addr));
 
     return 0;
 }
@@ -84,6 +82,8 @@ int main(__attribute__((unused)) int argc, const char *argv[])
     TRACE_R traceroute;
     t_args *args;
 
+    traceroute.progname = argv[0];
+
     if (parse_args(&argp, argv, &args))
         return 1;
 
@@ -91,7 +91,7 @@ int main(__attribute__((unused)) int argc, const char *argv[])
 
     if (!argr)
     {
-        help_args(&argp, argv[0]);
+        help_args(&argp, traceroute.progname);
         free_args(args);
         return 1;
     }
@@ -103,17 +103,54 @@ int main(__attribute__((unused)) int argc, const char *argv[])
         return 1;
     }
 
-    traceroute.socket_desc = socket(AF_INET, SOCK_DGRAM, 0);
-    traceroute.port = PORT;
-    traceroute.ttl = 1;
-    traceroute.max_ttl = MAX_HOPS;
-
-    if (traceroute.socket_desc < 0)
+    traceroute.udp_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (traceroute.udp_fd < 0)
     {
         perror("Could not create socket");
         return 1;
     }
 
+    struct protoent *proto = getprotobyname("icmp");
+    if (!proto)
+    {
+        fprintf(stderr, "%s: unknown protocol icmp.\n", traceroute.progname);
+        return -1;
+    }
+    traceroute.icmp_fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
+    if (traceroute.icmp_fd < 0)
+    {
+        if (errno == EPERM || errno == EACCES)
+        {
+            errno = 0;
+            traceroute.icmp_fd = socket(AF_INET, SOCK_DGRAM, proto->p_proto);
+            if (traceroute.icmp_fd < 0)
+            {
+                if (errno == EPERM || errno == EACCES || errno == EPROTONOSUPPORT)
+                    printf("%s: Lacking privilege for icmp socket.\n", traceroute.progname);
+                else
+                    printf("%s: %s\n", traceroute.progname, strerror(errno));
+
+                return -1;
+            }
+        }
+        else
+        {
+            return -1;
+        }
+    }
+
+    traceroute.port = PORT;
+    traceroute.ttl = FIRST_TTL;
+    traceroute.max_ttl = MAX_HOPS;
+    traceroute.timeout = TIMEOUT;
+    traceroute.nqueries = NQUERIES;
+
+    if (setsockopt(traceroute.icmp_fd, IPPROTO_IP, IP_TTL,
+                   &traceroute.ttl, sizeof(traceroute.ttl)) < 0)
+    {
+        perror("Could not set TTL");
+        return 1;
+    }
     printf("Traceroute to %s (%s), %d hops max, %d byte packets\n",
            traceroute.hostname,
            inet_ntoa(traceroute.to.sin_addr),
@@ -126,7 +163,7 @@ int main(__attribute__((unused)) int argc, const char *argv[])
         traceroute.ttl++;
     }
 
-    close(traceroute.socket_desc);
+    close(traceroute.udp_fd);
     free_args(args);
 
     return 0;

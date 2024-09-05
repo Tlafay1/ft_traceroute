@@ -2,6 +2,7 @@
 #define TRACEROUTE_H
 
 #include <limits.h>
+#include <stdbool.h>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -15,26 +16,32 @@
 #include "argparse.h"
 
 static t_argo options[] = {
-    {'p', "port", "port", "Set the port to use", ONE_ARG},
-    {'m', "max-ttl", "max-ttl", "Set the max ttl to use", ONE_ARG},
-    {'f', "first-ttl", "first-ttl", "Set the first ttl to use", ONE_ARG},
+    {'f', "first-hop", "first-hop", "set initial hop distance, i.e., time-to-live", ONE_ARG},
+    {'m', "max-hop", "max-hop", "set maximal hop count (default: 64)", ONE_ARG},
+    {'p', "port", "port", "use destination PORT port (default: 33434)", ONE_ARG},
+    {'q', "tries", "queries", "send NUM probe packets per hop (default: 3)", ONE_ARG},
+    {'w', "wait", "wait", "wait NUM seconds for response (default: 3)", ONE_ARG},
     {0, NULL, NULL, NULL, NO_ARG}};
 
 static t_argp argp __attribute__((unused)) = {
     .options = options,
-    .args_doc = "host [packetlen] [options]",
-    .doc = "Arguments:\n"
-           "+     host          The host to traceroute to\n"
-           "      packetlen     The full packet length(default is the length of an IP\n"
-           "                    header plus 40). Can be ignored or increased to a minimal\n"
-           "                    allowed value\n"
-           "Options :"};
+    .args_doc = "[OPTION...] HOST",
+    .doc = "Print the route packets trace to network host.\n"};
 
-#define PORT 33434
+#define MAXIPLEN 60
+#define MAXICMPLEN 76
+
+#define CAPTURE_LEN (MAXIPLEN + MAXICMPLEN)
+
+#define FIRST_TTL 1
 
 #define MAX_HOPS 30
 
-#define FIRST_TTL 1
+#define PORT 33434
+
+#define NQUERIES 3
+
+#define TIMEOUT 5
 
 /*
  * @brief Structure for the traceroute command
@@ -45,11 +52,14 @@ struct traceroute_args
     struct sockaddr_in to;
     struct sockaddr_in from;
     char hostname[HOST_NAME_MAX];
-    int socket_desc;
+    const char *progname;
+    int udp_fd;
+    int icmp_fd;
     // int packetlen;
     int ttl;
     int max_ttl;
-    // int nqueries;
+    int timeout;
+    int nqueries;
     // int nprobes;
     // int waittime;
     int port;
