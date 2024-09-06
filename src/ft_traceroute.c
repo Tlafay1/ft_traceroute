@@ -19,6 +19,8 @@ int send_packet(TRACE_R *traceroute)
         return EXIT_FAILURE;
     }
 
+    gettimeofday(&traceroute->sent, NULL);
+
     return EXIT_SUCCESS;
 }
 
@@ -28,11 +30,10 @@ int recv_packet(TRACE_R *traceroute, bool *done)
     socklen_t fromsize = sizeof(traceroute->from);
     ssize_t received;
     uint hlen;
-    // struct timeval now, sent, *tp;
     struct icmphdr *icp;
 
     received = recvfrom(traceroute->icmp_fd, buffer, sizeof buffer - 1, 0, (struct sockaddr *)&traceroute->from, &fromsize);
-
+    gettimeofday(&traceroute->received, NULL);
     if (received < 0)
     {
         perror("Could not receive packet");
@@ -189,6 +190,7 @@ int main(__attribute__((unused)) int argc, const char *argv[])
                 recv_packet(&traceroute, &done);
                 if (previous_addr != traceroute.from.sin_addr.s_addr)
                     printf(" %s ", inet_ntoa(traceroute.from.sin_addr));
+                printf(" %.3f ms ", ((double)(traceroute.received.tv_sec - traceroute.sent.tv_sec)) * 1000.0 + ((double)(traceroute.received.tv_usec - traceroute.sent.tv_usec)) / 1000.0);
                 previous_addr = traceroute.from.sin_addr.s_addr;
                 fflush(stdout);
             }

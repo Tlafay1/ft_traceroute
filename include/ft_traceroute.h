@@ -3,6 +3,7 @@
 
 #include <limits.h>
 #include <stdbool.h>
+#include <sys/time.h>
 
 #include <netdb.h>
 #include <sys/socket.h>
@@ -52,16 +53,15 @@ struct traceroute_args
     struct sockaddr_in to;
     struct sockaddr_in from;
     char hostname[HOST_NAME_MAX];
+    struct timeval sent;
+    struct timeval received;
     const char *progname;
     int udp_fd;
     int icmp_fd;
-    // int packetlen;
     int ttl;
     int max_ttl;
     int timeout;
     int nqueries;
-    // int nprobes;
-    // int waittime;
     int port;
 };
 
