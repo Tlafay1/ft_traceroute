@@ -59,10 +59,18 @@ struct traceroute_args
     int udp_fd;
     int icmp_fd;
     int ttl;
+    int first_ttl;
     int max_ttl;
     int timeout;
     int nqueries;
     int port;
 };
+
+void parse_traceroute_options(TRACE_R *traceroute, t_args *args);
+void parse_first_hop(TRACE_R *traceroute, char *arg);
+void parse_max_hop(TRACE_R *traceroute, char *arg);
+void parse_port(TRACE_R *traceroute, char *arg);
+void parse_tries(TRACE_R *traceroute, char *arg);
+void parse_wait(TRACE_R *traceroute, char *arg);
 
 #endif

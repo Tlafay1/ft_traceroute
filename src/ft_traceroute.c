@@ -12,13 +12,13 @@ int send_packet(TRACE_R *traceroute)
     if (setsockopt(traceroute->udp_fd, IPPROTO_IP, IP_TTL, &ttl, sizeof(ttl)) < 0)
     {
         perror("Could not set TTL");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     if (sendto(traceroute->udp_fd, message, ft_strlen(message), 0, (struct sockaddr *)&traceroute->to, tosize) < 0)
     {
         perror("Could not send packet");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     gettimeofday(&traceroute->sent, NULL);
@@ -39,7 +39,7 @@ int recv_packet(TRACE_R *traceroute, uint8_t *type, uint8_t *code)
     if (received < 0)
     {
         perror("Could not receive packet");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     struct ip *ip_packet = (struct ip *)buffer;
@@ -48,18 +48,13 @@ int recv_packet(TRACE_R *traceroute, uint8_t *type, uint8_t *code)
     icp = (struct icmphdr *)(buffer + hlen);
     *type = icp->type;
     *code = icp->code;
-
-    // *done = icp->type == ICMP_DEST_UNREACH || icp->type == ICMP_ECHOREPLY;
-
-    // if (icp->type == ICMP_DEST_UNREACH && icp->code != ICMP_PORT_UNREACH)
-    //     printf("!%c ", unreach_sign[icp->code & 0x0f]);
     return EXIT_SUCCESS;
 }
 
 /**
  * Sets the destination address for the TRACE_R structure.
  *
- * @param trouceroute The TRACE_R structure to set the destination for.
+ * @param traceroute The TRACE_R structure to set the destination for.
  * @param host The hostname or IP address of the destination.
  * @return Returns 0 on success, or 1 if an error occurred.
  */
@@ -70,12 +65,12 @@ static int set_dest(TRACE_R *traceroute, const char *host)
     if ((hostinfo = gethostbyname(host)) == NULL)
     {
         perror("Could not get host by name");
-        return EXIT_FAILURE;
+        exit(EXIT_FAILURE);
     }
 
     traceroute->to.sin_addr = *(struct in_addr *)hostinfo->h_addr;
     traceroute->to.sin_family = AF_INET;
-    traceroute->to.sin_port = htons(PORT);
+    traceroute->to.sin_port = htons(traceroute->port);
 
     memcpy(&traceroute->to.sin_addr, hostinfo->h_addr_list[0], hostinfo->h_length);
     strncpy(traceroute->hostname, host, HOST_NAME_MAX);
@@ -92,6 +87,14 @@ int main(__attribute__((unused)) int argc, const char *argv[])
 
     if (parse_args(&argp, argv, &args))
         return EXIT_FAILURE;
+
+    traceroute.port = PORT;
+    traceroute.first_ttl = FIRST_TTL;
+    traceroute.max_ttl = MAX_HOPS;
+    traceroute.timeout = TIMEOUT;
+    traceroute.nqueries = NQUERIES;
+
+    parse_traceroute_options(&traceroute, args);
 
     t_argr *argr = get_next_arg(args);
 
@@ -146,11 +149,7 @@ int main(__attribute__((unused)) int argc, const char *argv[])
         }
     }
 
-    traceroute.port = PORT;
-    traceroute.ttl = FIRST_TTL;
-    traceroute.max_ttl = MAX_HOPS;
-    traceroute.timeout = TIMEOUT;
-    traceroute.nqueries = NQUERIES;
+    traceroute.ttl = traceroute.first_ttl;
 
     if (setsockopt(traceroute.icmp_fd, IPPROTO_IP, IP_TTL,
                    &traceroute.ttl, sizeof(traceroute.ttl)) < 0)
@@ -169,17 +168,17 @@ int main(__attribute__((unused)) int argc, const char *argv[])
     while (traceroute.ttl <= traceroute.max_ttl && !done)
     {
         in_addr_t previous_addr = 0;
-        printf("%2d  ", traceroute.ttl);
+        printf("%2d  ", traceroute.ttl - traceroute.first_ttl + 1);
         for (int tries = 0; tries < traceroute.nqueries; tries++)
         {
-            FD_ZERO(&readset);
-            FD_SET(traceroute.icmp_fd, &readset);
-
             memset(&timeout, 0, sizeof(timeout));
             timeout.tv_sec = traceroute.timeout;
             timeout.tv_usec = 0;
 
             send_packet(&traceroute);
+
+            FD_ZERO(&readset);
+            FD_SET(traceroute.icmp_fd, &readset);
 
             int ret = select(traceroute.icmp_fd + 1, &readset, NULL, NULL, &timeout);
             if (ret < 0)
@@ -191,7 +190,7 @@ int main(__attribute__((unused)) int argc, const char *argv[])
             {
                 printf(" * ");
                 // If I wanted the exact same output and timing as the original traceroute, I'd use this
-                // fflush(stdout);
+                fflush(stdout);
             }
             else if (FD_ISSET(traceroute.icmp_fd, &readset))
             {
@@ -204,6 +203,7 @@ int main(__attribute__((unused)) int argc, const char *argv[])
                     printf("!%c ", unreach_sign[code & 0x0f]);
                 previous_addr = traceroute.from.sin_addr.s_addr;
                 done = type == ICMP_DEST_UNREACH || type == ICMP_ECHOREPLY;
+                fflush(stdout);
             }
         }
         printf("\n");

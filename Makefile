@@ -4,7 +4,7 @@ CFLAGS := -Wall -Wextra -Werror -std=gnu99
 
 RM := rm -f
 
-SRCS := ft_traceroute.c
+SRCS := ft_traceroute.c parse.c
 
 OBJS := $(addprefix obj/, ${SRCS:.c=.o})
 
