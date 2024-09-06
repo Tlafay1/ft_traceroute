@@ -1,5 +1,7 @@
 #include "ft_traceroute.h"
 
+const char unreach_sign[NR_ICMP_UNREACH + 2] = "NHPPFS**U**TTXXX";
+
 int send_packet(TRACE_R *traceroute)
 {
     char message[] = "Superman";
@@ -24,7 +26,7 @@ int send_packet(TRACE_R *traceroute)
     return EXIT_SUCCESS;
 }
 
-int recv_packet(TRACE_R *traceroute, bool *done)
+int recv_packet(TRACE_R *traceroute, uint8_t *type, uint8_t *code)
 {
     char buffer[CAPTURE_LEN];
     socklen_t fromsize = sizeof(traceroute->from);
@@ -44,8 +46,13 @@ int recv_packet(TRACE_R *traceroute, bool *done)
     hlen = ip_packet->ip_hl << 2;
 
     icp = (struct icmphdr *)(buffer + hlen);
+    *type = icp->type;
+    *code = icp->code;
 
-    *done = icp->type == ICMP_DEST_UNREACH || icp->type == ICMP_ECHOREPLY;
+    // *done = icp->type == ICMP_DEST_UNREACH || icp->type == ICMP_ECHOREPLY;
+
+    // if (icp->type == ICMP_DEST_UNREACH && icp->code != ICMP_PORT_UNREACH)
+    //     printf("!%c ", unreach_sign[icp->code & 0x0f]);
     return EXIT_SUCCESS;
 }
 
@@ -183,16 +190,20 @@ int main(__attribute__((unused)) int argc, const char *argv[])
             else if (ret == 0)
             {
                 printf(" * ");
-                fflush(stdout);
+                // If I wanted the exact same output and timing as the original traceroute, I'd use this
+                // fflush(stdout);
             }
             else if (FD_ISSET(traceroute.icmp_fd, &readset))
             {
-                recv_packet(&traceroute, &done);
+                uint8_t type, code;
+                recv_packet(&traceroute, &type, &code);
                 if (previous_addr != traceroute.from.sin_addr.s_addr)
                     printf(" %s ", inet_ntoa(traceroute.from.sin_addr));
-                printf(" %.3f ms ", ((double)(traceroute.received.tv_sec - traceroute.sent.tv_sec)) * 1000.0 + ((double)(traceroute.received.tv_usec - traceroute.sent.tv_usec)) / 1000.0);
+                printf(" %.3fms ", ((double)(traceroute.received.tv_sec - traceroute.sent.tv_sec)) * 1000.0 + ((double)(traceroute.received.tv_usec - traceroute.sent.tv_usec)) / 1000.0);
+                if (type == ICMP_DEST_UNREACH && code != ICMP_PORT_UNREACH)
+                    printf("!%c ", unreach_sign[code & 0x0f]);
                 previous_addr = traceroute.from.sin_addr.s_addr;
-                fflush(stdout);
+                done = type == ICMP_DEST_UNREACH || type == ICMP_ECHOREPLY;
             }
         }
         printf("\n");
