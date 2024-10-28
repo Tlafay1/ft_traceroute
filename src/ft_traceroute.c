@@ -4,6 +4,7 @@ const char unreach_sign[NR_ICMP_UNREACH + 2] = "NHPPFS**U**TTXXX";
 
 int send_packet(TRACE_R *traceroute)
 {
+    // Yep, that's literally what the original traceroute sends
     char message[] = "Superman";
 
     socklen_t tosize = sizeof(traceroute->to);
@@ -171,11 +172,11 @@ int main(__attribute__((unused)) int argc, const char *argv[])
         printf("%2d  ", traceroute.ttl - traceroute.first_ttl + 1);
         for (int tries = 0; tries < traceroute.nqueries; tries++)
         {
+            send_packet(&traceroute);
+
             memset(&timeout, 0, sizeof(timeout));
             timeout.tv_sec = traceroute.timeout;
             timeout.tv_usec = 0;
-
-            send_packet(&traceroute);
 
             FD_ZERO(&readset);
             FD_SET(traceroute.icmp_fd, &readset);
@@ -186,11 +187,11 @@ int main(__attribute__((unused)) int argc, const char *argv[])
                 perror("Could not select");
                 return EXIT_FAILURE;
             }
-            else if (ret == 0)
+            else if (ret == 0 || traceroute.timeout == 0)
             {
                 printf(" * ");
                 // If I wanted the exact same output and timing as the original traceroute, I'd use this
-                fflush(stdout);
+                // fflush(stdout);
             }
             else if (FD_ISSET(traceroute.icmp_fd, &readset))
             {
@@ -203,7 +204,7 @@ int main(__attribute__((unused)) int argc, const char *argv[])
                     printf("!%c ", unreach_sign[code & 0x0f]);
                 previous_addr = traceroute.from.sin_addr.s_addr;
                 done = type == ICMP_DEST_UNREACH || type == ICMP_ECHOREPLY;
-                fflush(stdout);
+                // fflush(stdout);
             }
         }
         printf("\n");
